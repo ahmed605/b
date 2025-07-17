@@ -30,7 +30,7 @@ impl Target {
             Self::Uxn                => c!(".rom"),
             Self::Mos6502            => c!(".6502"),
             Self::ILasm_Mono         => c!(".exe"),
-            Self::ILasm_Core         => c!(".dll"),
+            Self::ILasm_Core         => c!(".exe.dll"),
         }
     }
 
