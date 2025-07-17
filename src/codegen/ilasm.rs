@@ -310,8 +310,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
         }
     }
 
-    // TODO: implement extrns support for Mono
-    let has_undefined_extrns = !mono && undefined_extrns.count > 0 && linker.len() > 0;
+    let has_undefined_extrns = undefined_extrns.count > 0 && linker.len() > 0;
     if has_undefined_extrns {
         for i in 0..linker.len() {
             let lib = (*linker)[i];
@@ -321,38 +320,97 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
 
     if globals.len() > 0 || has_rand || has_undefined_extrns {
         if has_undefined_extrns {
-            sb_appendf(output, c!("    .method static native int '<LoadLibrary>'(string) {\n"));
-            sb_appendf(output, c!("        .locals init (native int lib)\n"));
-            sb_appendf(output, c!("        call valuetype [System.Runtime]System.Runtime.InteropServices.OSPlatform [System.Runtime]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
-            sb_appendf(output, c!("        call bool [System.Runtime]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [System.Runtime]System.Runtime.InteropServices.OSPlatform)\n"));
-            sb_appendf(output, c!("        brfalse.s Unix\n"));
-            sb_appendf(output, c!("        ldarg.0\n"));
-            sb_appendf(output, c!("        ldstr \".dll\"\n"));
-            sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
-            sb_appendf(output, c!("        ldloca.s 0\n"));
-            sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
-            sb_appendf(output, c!("        brtrue.s Success\n"));
-            sb_appendf(output, c!("        br.s Failed\n"));
-            sb_appendf(output, c!("    Unix:\n"));
-            sb_appendf(output, c!("        ldarg.0\n"));
-            sb_appendf(output, c!("        ldloca.s 0\n"));
-            sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
-            sb_appendf(output, c!("        brtrue.s Success\n"));
-            sb_appendf(output, c!("        ldstr \"lib\"\n"));
-            sb_appendf(output, c!("        ldarg.0\n"));
-            sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
-            sb_appendf(output, c!("        ldloca.s 0\n"));
-            sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
-            sb_appendf(output, c!("        brtrue.s Success\n"));
-            sb_appendf(output, c!("        br.s Failed\n"));
-            sb_appendf(output, c!("    Failed:\n"));
-            sb_appendf(output, c!("        ldc.i8 0\n"));
-            sb_appendf(output, c!("        conv.i\n"));
-            sb_appendf(output, c!("        ret\n"));
-            sb_appendf(output, c!("    Success:\n"));
-            sb_appendf(output, c!("        ldloc.0\n"));
-            sb_appendf(output, c!("        ret\n"));
-            sb_appendf(output, c!("    }\n"));
+            if !mono {
+                sb_appendf(output, c!("    .method static native int '<LoadLibrary>'(string) {\n"));
+                sb_appendf(output, c!("        .locals init (native int lib)\n"));
+                sb_appendf(output, c!("        call valuetype [System.Runtime]System.Runtime.InteropServices.OSPlatform [System.Runtime]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
+                sb_appendf(output, c!("        call bool [System.Runtime]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [System.Runtime]System.Runtime.InteropServices.OSPlatform)\n"));
+                sb_appendf(output, c!("        brfalse.s Unix\n"));
+                sb_appendf(output, c!("        ldarg.0\n"));
+                sb_appendf(output, c!("        ldstr \".dll\"\n"));
+                sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+                sb_appendf(output, c!("        ldloca.s 0\n"));
+                sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
+                sb_appendf(output, c!("        brtrue.s Success\n"));
+                sb_appendf(output, c!("        br.s Failed\n"));
+                sb_appendf(output, c!("    Unix:\n"));
+                sb_appendf(output, c!("        ldarg.0\n"));
+                sb_appendf(output, c!("        ldloca.s 0\n"));
+                sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
+                sb_appendf(output, c!("        brtrue.s Success\n"));
+                sb_appendf(output, c!("        ldstr \"lib\"\n"));
+                sb_appendf(output, c!("        ldarg.0\n"));
+                sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+                sb_appendf(output, c!("        ldloca.s 0\n"));
+                sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
+                sb_appendf(output, c!("        brtrue.s Success\n"));
+                sb_appendf(output, c!("        br.s Failed\n"));
+                sb_appendf(output, c!("    Failed:\n"));
+                sb_appendf(output, c!("        ldc.i8 0\n"));
+                sb_appendf(output, c!("        conv.i\n"));
+                sb_appendf(output, c!("        ret\n"));
+                sb_appendf(output, c!("    Success:\n"));
+                sb_appendf(output, c!("        ldloc.0\n"));
+                sb_appendf(output, c!("        ret\n"));
+                sb_appendf(output, c!("    }\n"));
+            }
+            else {
+                sb_appendf(output, c!("    .method static pinvokeimpl(\"libdl\" as \"dlopen\" nomangle ansi cdecl) native int '<dlopen>'(string, int32) preservesig {}\n"));
+                sb_appendf(output, c!("    .method static pinvokeimpl(\"libdl\" as \"dlsym\" nomangle ansi cdecl) native int '<dlsym>'(native int, string) preservesig {}\n"));
+                sb_appendf(output, c!("    .method static pinvokeimpl(\"kernel32.dll\" as \"LoadLibraryA\" nomangle ansi winapi) native int '<LoadLibraryA>'(string) preservesig {}\n"));
+                sb_appendf(output, c!("    .method static pinvokeimpl(\"kernel32.dll\" as \"GetProcAddress\" nomangle ansi winapi) native int '<GetProcAddress>'(native int, string) preservesig {}\n"));
+
+                sb_appendf(output, c!("    .method static native int '<LoadLibrary>'(string) {\n"));
+                sb_appendf(output, c!("        .locals init (native int lib)\n"));
+                sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
+                sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+                sb_appendf(output, c!("        brfalse.s Unix\n"));
+                sb_appendf(output, c!("        ldarg.0\n"));
+                sb_appendf(output, c!("        ldstr \".dll\"\n"));
+                sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+                sb_appendf(output, c!("        call native int Program::'<LoadLibraryA>'(string)\n"));
+                sb_appendf(output, c!("        stloc.0\n"));
+                sb_appendf(output, c!("        ldloc.0\n"));
+                sb_appendf(output, c!("        brtrue.s Success\n"));
+                sb_appendf(output, c!("        br.s Failed\n"));
+                sb_appendf(output, c!("    Unix:\n"));
+                sb_appendf(output, c!("        ldarg.0\n"));
+                sb_appendf(output, c!("        ldc.i4.1\n"));
+                sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
+                sb_appendf(output, c!("        stloc.0\n"));
+                sb_appendf(output, c!("        ldloc.0\n"));
+                sb_appendf(output, c!("        brtrue.s Success\n"));
+                sb_appendf(output, c!("        ldstr \"lib\"\n"));
+                sb_appendf(output, c!("        ldarg.0\n"));
+                sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+                sb_appendf(output, c!("        ldc.i4.1\n"));
+                sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
+                sb_appendf(output, c!("        stloc.0\n"));
+                sb_appendf(output, c!("        ldloc.0\n"));
+                sb_appendf(output, c!("        brtrue.s Success\n"));
+                sb_appendf(output, c!("        br.s Failed\n"));
+                sb_appendf(output, c!("    Failed:\n"));
+                sb_appendf(output, c!("        ldc.i8 0\n"));
+                sb_appendf(output, c!("        conv.i\n"));
+                sb_appendf(output, c!("        ret\n"));
+                sb_appendf(output, c!("    Success:\n"));
+                sb_appendf(output, c!("        ldloc.0\n"));
+                sb_appendf(output, c!("        ret\n"));
+                sb_appendf(output, c!("    }\n"));
+
+                sb_appendf(output, c!("    .method static native int '<GetExport>'(native int, string) {\n"));
+                sb_appendf(output, c!("        ldarg.0\n"));
+                sb_appendf(output, c!("        ldarg.1\n"));
+                sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
+                sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+                sb_appendf(output, c!("        brfalse.s Unix\n"));
+                sb_appendf(output, c!("        call native int Program::'<GetProcAddress>'(native int, string)\n"));
+                sb_appendf(output, c!("        ret\n"));
+                sb_appendf(output, c!("    Unix:\n"));
+                sb_appendf(output, c!("        call native int Program::'<dlsym>'(native int, string)\n"));
+                sb_appendf(output, c!("        ret\n"));
+                sb_appendf(output, c!("    }\n"));
+            }
 
             sb_appendf(output, c!("    .method static native int '<ResolveExtrn>'(string) {\n"));
             sb_appendf(output, c!("        .locals init (native int fnptr)\n"));
@@ -360,8 +418,15 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
                 let lib = (*linker)[i];
                 sb_appendf(output, c!("        ldsfld native int Program::'<%s_lib>'\n"), lib);
                 sb_appendf(output, c!("        ldarg.0\n"));
-                sb_appendf(output, c!("        ldloca.s 0\n"));
-                sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryGetExport(native int, string, native int&)\n"));
+                if !mono {
+                    sb_appendf(output, c!("        ldloca.s 0\n"));
+                    sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryGetExport(native int, string, native int&)\n"));
+                }
+                else {
+                    sb_appendf(output, c!("        call native int Program::'<GetExport>'(native int, string)\n"));
+                    sb_appendf(output, c!("        stloc.0\n"));
+                    sb_appendf(output, c!("        ldloc.0\n"));
+                }
                 sb_appendf(output, c!("        brtrue.s Success\n"));
             }
             sb_appendf(output, c!("        br.s Failed\n"));
