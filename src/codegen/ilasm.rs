@@ -360,8 +360,8 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
                 sb_appendf(output, c!("    }\n"));
             }
             else {
-                sb_appendf(output, c!("    .method static pinvokeimpl(\"libdl\" as \"dlopen\" nomangle ansi cdecl) native int '<dlopen>'(string, int32) preservesig {}\n"));
-                sb_appendf(output, c!("    .method static pinvokeimpl(\"libdl\" as \"dlsym\" nomangle ansi cdecl) native int '<dlsym>'(native int, string) preservesig {}\n"));
+                sb_appendf(output, c!("    .method static pinvokeimpl(\"libc\" as \"dlopen\" nomangle ansi cdecl) native int '<dlopen>'(string, int32) preservesig {}\n"));
+                sb_appendf(output, c!("    .method static pinvokeimpl(\"libc\" as \"dlsym\" nomangle ansi cdecl) native int '<dlsym>'(native int, string) preservesig {}\n"));
                 sb_appendf(output, c!("    .method static pinvokeimpl(\"kernel32.dll\" as \"LoadLibraryA\" nomangle ansi winapi) native int '<LoadLibraryA>'(string) preservesig {}\n"));
                 sb_appendf(output, c!("    .method static pinvokeimpl(\"kernel32.dll\" as \"GetProcAddress\" nomangle ansi winapi) native int '<GetProcAddress>'(native int, string) preservesig {}\n"));
 
