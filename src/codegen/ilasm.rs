@@ -320,6 +320,8 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
 
     if globals.len() > 0 || has_rand || has_undefined_extrns {
         if has_undefined_extrns {
+            sb_appendf(output, c!("    .field public static string '<PosixSuffix>'\n"));
+
             if !mono {
                 sb_appendf(output, c!("    .method static native int '<LoadLibrary>'(string) {\n"));
                 sb_appendf(output, c!("        .locals init (native int lib)\n"));
@@ -335,12 +337,15 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
                 sb_appendf(output, c!("        br.s Failed\n"));
                 sb_appendf(output, c!("    Unix:\n"));
                 sb_appendf(output, c!("        ldarg.0\n"));
+                sb_appendf(output, c!("        ldsfld string Program::'<PosixSuffix>'\n"));
+                sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
                 sb_appendf(output, c!("        ldloca.s 0\n"));
                 sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
                 sb_appendf(output, c!("        brtrue.s Success\n"));
                 sb_appendf(output, c!("        ldstr \"lib\"\n"));
                 sb_appendf(output, c!("        ldarg.0\n"));
-                sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+                sb_appendf(output, c!("        ldsfld string Program::'<PosixSuffix>'\n"));
+                sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string, string)\n"));
                 sb_appendf(output, c!("        ldloca.s 0\n"));
                 sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
                 sb_appendf(output, c!("        brtrue.s Success\n"));
@@ -375,6 +380,8 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
                 sb_appendf(output, c!("        br.s Failed\n"));
                 sb_appendf(output, c!("    Unix:\n"));
                 sb_appendf(output, c!("        ldarg.0\n"));
+                sb_appendf(output, c!("        ldsfld string Program::'<PosixSuffix>'\n"));
+                sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
                 sb_appendf(output, c!("        ldc.i4.1\n"));
                 sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
                 sb_appendf(output, c!("        stloc.0\n"));
@@ -382,7 +389,8 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
                 sb_appendf(output, c!("        brtrue.s Success\n"));
                 sb_appendf(output, c!("        ldstr \"lib\"\n"));
                 sb_appendf(output, c!("        ldarg.0\n"));
-                sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+                sb_appendf(output, c!("        ldsfld string Program::'<PosixSuffix>'\n"));
+                sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string, string)\n"));
                 sb_appendf(output, c!("        ldc.i4.1\n"));
                 sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
                 sb_appendf(output, c!("        stloc.0\n"));
@@ -509,6 +517,16 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
         }
 
         if has_undefined_extrns {
+            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Linux()\n"));
+            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+            sb_appendf(output, c!("        brfalse.s macOS\n"));
+            sb_appendf(output, c!("        ldstr \".so\"\n"));
+            sb_appendf(output, c!("        br.s SetSuffix\n"));
+            sb_appendf(output, c!("    macOS:\n"));
+            sb_appendf(output, c!("        ldstr \".dylib\"\n"));
+            sb_appendf(output, c!("    SetSuffix:\n"));
+            sb_appendf(output, c!("        stsfld string Program::'<PosixSuffix>'\n"));
+
             for i in 0..linker.len() {
                 let lib = (*linker)[i];
                 sb_appendf(output, c!("        ldstr \"%s\"\n"), lib);
