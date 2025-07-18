@@ -446,6 +446,29 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
             sb_appendf(output, c!("        ldloc.0\n"));
             sb_appendf(output, c!("        ret\n"));
             sb_appendf(output, c!("    }\n"));
+
+            sb_appendf(output, c!("    .method static void '<AddCurrentDirToPath>'() {\n"));
+            sb_appendf(output, c!("        .locals init (string path)\n"));
+            sb_appendf(output, c!("        ldstr \"LD_LIBRARY_PATH\"\n"));
+            sb_appendf(output, c!("        call string [mscorlib]System.Environment::GetEnvironmentVariable(string)\n"));
+            sb_appendf(output, c!("        stloc.0\n"));
+            sb_appendf(output, c!("        ldloc.0\n"));
+            sb_appendf(output, c!("        brfalse.s SetToCurrentDir\n"));
+            sb_appendf(output, c!("        ldloc.0\n"));
+            sb_appendf(output, c!("        ldstr \":\"\n"));
+            sb_appendf(output, c!("        call string [mscorlib]System.IO.Directory::GetCurrentDirectory()\n"));
+            sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string, string)\n"));
+            sb_appendf(output, c!("        stloc.0\n"));
+            sb_appendf(output, c!("        br.s SetEnvVar\n"));
+            sb_appendf(output, c!("    SetToCurrentDir:\n"));
+            sb_appendf(output, c!("        call string [mscorlib]System.IO.Directory::GetCurrentDirectory()\n"));
+            sb_appendf(output, c!("        stloc.0\n"));
+            sb_appendf(output, c!("    SetEnvVar:\n"));
+            sb_appendf(output, c!("        ldstr \"LD_LIBRARY_PATH\"\n"));
+            sb_appendf(output, c!("        ldloc.0\n"));
+            sb_appendf(output, c!("        call void [mscorlib]System.Environment::SetEnvironmentVariable(string, string)\n"));
+            sb_appendf(output, c!("        ret\n"));
+            sb_appendf(output, c!("    }\n"));
         }
 
         sb_appendf(output, c!("    .method static void .cctor() {\n"));
@@ -520,6 +543,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
             sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Linux()\n"));
             sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
             sb_appendf(output, c!("        brfalse.s macOS\n"));
+            sb_appendf(output, c!("        call void Program::'<AddCurrentDirToPath>'()\n"));
             sb_appendf(output, c!("        ldstr \".so\"\n"));
             sb_appendf(output, c!("        br.s SetSuffix\n"));
             sb_appendf(output, c!("    macOS:\n"));
