@@ -58,3 +58,6 @@ char(s,n) {
 }
 
 extrn printf;
+extrn putchar;
+extrn getchar;
+extrn exit;
