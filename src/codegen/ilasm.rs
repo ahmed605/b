@@ -298,7 +298,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
         let mut extrn_defined = false;
         for j in 0..funcs.len() {
             let func = (*funcs)[j];
-            if strcmp(func.name, extrn) == 0 {
+            if strcmp(func.name, extrn) == 0 || strcmp(c!("printf"), extrn) == 0 {
                 extrn_defined = true;
                 break;
             }
