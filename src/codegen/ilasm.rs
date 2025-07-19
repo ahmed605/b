@@ -45,14 +45,14 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
             // TODO: unhardcode the printf
             //   The main difficulty here will be passing the string, since B ilasm-mono runtime only operates on int64
             //   as of right now. Some hack is required in here. Look into the direction of boxing the values.
-            if strcmp(name, c!("printf")) == 0 {
+            /*if strcmp(name, c!("printf")) == 0 {
                 for _i in 0..arity - 1 {
                     sb_appendf(out, c!("        pop\n"));
                 }
                 sb_appendf(out, c!("        newobj instance void [mscorlib]System.String::.ctor(int8*)\n"));
                 sb_appendf(out, c!("        call void class [mscorlib]System.Console::Write(string)\n"));
                 sb_appendf(out, c!("        ldc.i8 0\n"));
-            } else {
+            } else*/ {
                 let mut is_local_func = false;
                 for i in 0..funcs.len() {
                     let func = (*funcs)[i];
@@ -280,25 +280,45 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
+pub unsafe fn generate_extrn_lib_resolver(output: *mut String_Builder, lib: *const c_char, mono: bool) {
+    sb_appendf(output, c!("        ldsfld native int Program::'<%s_lib>'\n"), lib);
+    sb_appendf(output, c!("        ldarg.0\n"));
+    if !mono {
+        sb_appendf(output, c!("        ldloca.s 0\n"));
+        sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryGetExport(native int, string, native int&)\n"));
+    }
+    else {
+        sb_appendf(output, c!("        call native int Program::'<GetExport>'(native int, string)\n"));
+        sb_appendf(output, c!("        stloc.0\n"));
+        sb_appendf(output, c!("        ldloc.0\n"));
+    }
+    sb_appendf(output, c!("        brtrue.s Success\n"));
+}
+
 pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Global], extrns: *const [*const c_char], funcs: *const [Func], linker: *const [*const c_char], mono: bool) {
     for i in 0..globals.len() {
         sb_appendf(output, c!("    .field public static int64 '%s'\n"), (*globals)[i].name);
     }
 
-    let mut has_rand = false;
+    //let mut has_rand = false;
+    let mut has_malloc = false;
     let mut undefined_extrns: Array<*const c_char> = zeroed();
 
     for i in 0..extrns.len() {
         let extrn = (*extrns)[i];
-        if strcmp(extrn, c!("rand")) == 0 {
+        /*if strcmp(extrn, c!("rand")) == 0 {
             has_rand = true;
             sb_appendf(output, c!("    .field public static class [mscorlib]System.Random '<Random>'\n"));
+        }*/
+
+        if strcmp(extrn, c!("malloc")) == 0 {
+            has_malloc = true;
         }
 
         let mut extrn_defined = false;
         for j in 0..funcs.len() {
             let func = (*funcs)[j];
-            if strcmp(func.name, extrn) == 0 || strcmp(c!("printf"), extrn) == 0 {
+            if strcmp(func.name, extrn) == 0 /*|| strcmp(c!("printf"), extrn) == 0*/ {
                 extrn_defined = true;
                 break;
             }
@@ -310,15 +330,21 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
         }
     }
 
-    let has_undefined_extrns = undefined_extrns.count > 0 && linker.len() > 0;
-    if has_undefined_extrns {
-        for i in 0..linker.len() {
-            let lib = (*linker)[i];
-            sb_appendf(output, c!("    .field public static native int '<%s_lib>'\n"), lib);
-        }
+    // we need malloc for initializing global arrays
+    if !has_malloc && globals.len() > 0 {
+        da_append(&mut undefined_extrns, c!("malloc"));
+        sb_appendf(output, c!("    .field public static native int '<malloc_fnptr>'\n"));
     }
 
-    if globals.len() > 0 || has_rand || has_undefined_extrns {
+    sb_appendf(output, c!("    .field public static native int '<libc_lib>'\n"));
+
+    let has_undefined_extrns = undefined_extrns.count > 0;
+    for i in 0..linker.len() {
+        let lib = (*linker)[i];
+        sb_appendf(output, c!("    .field public static native int '<%s_lib>'\n"), lib);
+    }
+
+    if globals.len() > 0 || /* has_rand ||*/ has_undefined_extrns {
         if has_undefined_extrns {
             sb_appendf(output, c!("    .field public static string '<PosixSuffix>'\n"));
 
@@ -441,20 +467,10 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
 
             sb_appendf(output, c!("    .method static native int '<ResolveExtrn>'(string) {\n"));
             sb_appendf(output, c!("        .locals init (native int fnptr)\n"));
+            generate_extrn_lib_resolver(output, c!("libc"), mono);
             for i in 0..linker.len() {
                 let lib = (*linker)[i];
-                sb_appendf(output, c!("        ldsfld native int Program::'<%s_lib>'\n"), lib);
-                sb_appendf(output, c!("        ldarg.0\n"));
-                if !mono {
-                    sb_appendf(output, c!("        ldloca.s 0\n"));
-                    sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryGetExport(native int, string, native int&)\n"));
-                }
-                else {
-                    sb_appendf(output, c!("        call native int Program::'<GetExport>'(native int, string)\n"));
-                    sb_appendf(output, c!("        stloc.0\n"));
-                    sb_appendf(output, c!("        ldloc.0\n"));
-                }
-                sb_appendf(output, c!("        brtrue.s Success\n"));
+                generate_extrn_lib_resolver(output, lib, mono);
             }
             sb_appendf(output, c!("        br.s Failed\n"));
             sb_appendf(output, c!("    Failed:\n"));
@@ -469,12 +485,57 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
 
         sb_appendf(output, c!("    .method static void .cctor() {\n"));
 
+        if has_undefined_extrns {
+            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Linux()\n"));
+            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+            sb_appendf(output, c!("        brfalse.s macOS\n"));
+            sb_appendf(output, c!("        ldstr \".so\"\n"));
+            sb_appendf(output, c!("        br.s SetSuffix\n"));
+            sb_appendf(output, c!("    macOS:\n"));
+            sb_appendf(output, c!("        ldstr \".dylib\"\n"));
+            sb_appendf(output, c!("    SetSuffix:\n"));
+            sb_appendf(output, c!("        stsfld string Program::'<PosixSuffix>'\n"));
+
+            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
+            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+            sb_appendf(output, c!("        brfalse.s libc\n"));
+            sb_appendf(output, c!("        ldstr \"msvcrt\"\n"));
+            sb_appendf(output, c!("        call native int Program::'<LoadLibrary>'(string)\n"));
+            sb_appendf(output, c!("        br.s set_libc\n"));
+            sb_appendf(output, c!("    libc:\n"));
+            if mono {
+                sb_appendf(output, c!("        ldc.i8 0\n"));
+                sb_appendf(output, c!("        conv.i\n"));
+            }
+            else {
+                sb_appendf(output, c!("        call native int [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::GetMainProgramHandle()\n"));
+            }
+            sb_appendf(output, c!("    set_libc:\n"));
+            sb_appendf(output, c!("        stsfld native int Program::'<libc_lib>'\n"));
+
+            for i in 0..linker.len() {
+                let lib = (*linker)[i];
+                sb_appendf(output, c!("        ldstr \"%s\"\n"), lib);
+                sb_appendf(output, c!("        call native int Program::'<LoadLibrary>'(string)\n"));
+                sb_appendf(output, c!("        stsfld native int Program::'<%s_lib>'\n"), lib);
+            }
+
+            for i in 0..undefined_extrns.count {
+                let extrn = *undefined_extrns.items.add(i);
+                sb_appendf(output, c!("        ldstr \"%s\"\n"), extrn);
+                sb_appendf(output, c!("        call native int Program::'<ResolveExtrn>'(string)\n"));
+                sb_appendf(output, c!("        stsfld native int Program::'<%s_fnptr>'\n"), extrn);
+            }
+        }
+
         for i in 0..globals.len() {
             let global = (*globals)[i];
             let is_array = global.values.count > 1;
             if is_array {
                 sb_appendf(output, c!("        ldc.i8 %zd\n"), global.values.count * 8);
-                sb_appendf(output, c!("        call int64 Program::malloc(int64)\n"));
+                //sb_appendf(output, c!("        call int64 Program::malloc(int64)\n"));
+                sb_appendf(output, c!("        ldsfld native int Program::'<malloc_fnptr>'\n"));
+                sb_appendf(output, c!("        calli unmanaged cdecl int64(int64)"));
                 sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name);
             }
 
@@ -524,7 +585,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
             }
         }
 
-        if has_rand {
+        /*if has_rand {
             if mono {
                 sb_appendf(output, c!("        newobj instance void [mscorlib]System.Random::.ctor()\n"));
             }
@@ -533,33 +594,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
             }
 
             sb_appendf(output, c!("        stsfld class [mscorlib]System.Random Program::'<Random>'\n"));
-        }
-
-        if has_undefined_extrns {
-            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Linux()\n"));
-            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
-            sb_appendf(output, c!("        brfalse.s macOS\n"));
-            sb_appendf(output, c!("        ldstr \".so\"\n"));
-            sb_appendf(output, c!("        br.s SetSuffix\n"));
-            sb_appendf(output, c!("    macOS:\n"));
-            sb_appendf(output, c!("        ldstr \".dylib\"\n"));
-            sb_appendf(output, c!("    SetSuffix:\n"));
-            sb_appendf(output, c!("        stsfld string Program::'<PosixSuffix>'\n"));
-
-            for i in 0..linker.len() {
-                let lib = (*linker)[i];
-                sb_appendf(output, c!("        ldstr \"%s\"\n"), lib);
-                sb_appendf(output, c!("        call native int Program::'<LoadLibrary>'(string)\n"));
-                sb_appendf(output, c!("        stsfld native int Program::'<%s_lib>'\n"), lib);
-            }
-
-            for i in 0..undefined_extrns.count {
-                let extrn = *undefined_extrns.items.add(i);
-                sb_appendf(output, c!("        ldstr \"%s\"\n"), extrn);
-                sb_appendf(output, c!("        call native int Program::'<ResolveExtrn>'(string)\n"));
-                sb_appendf(output, c!("        stsfld native int Program::'<%s_fnptr>'\n"), extrn);
-            }
-        }
+        }*/
 
         sb_appendf(output, c!("        ret\n"));
         sb_appendf(output, c!("    }\n"));
