@@ -8,6 +8,11 @@
 //
 // # Windows mingw32-w64
 // > b -t gas-x86_64-windows raylib.b -L -L$HOME/opt/raylib-version_win64_mingw-w64/lib/ -L -l:libraylib.a -L -lwinmm -L -lgdi32 -run
+//
+// # ILasm
+//
+// $ b -t ilasm-core raylib.b -L raylib -run
+// $ b -t ilasm-mono raylib.b -L raylib -run
 
 W;
 
