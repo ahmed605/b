@@ -474,9 +474,11 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
             }
             sb_appendf(output, c!("        br.s Failed\n"));
             sb_appendf(output, c!("    Failed:\n"));
-            sb_appendf(output, c!("        ldc.i8 0\n"));
-            sb_appendf(output, c!("        conv.i\n"));
-            sb_appendf(output, c!("        ret\n"));
+            sb_appendf(output, c!("        ldstr \"Unable to resolve extrn \"\n"));
+            sb_appendf(output, c!("        ldarg.0\n"));
+            sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+            sb_appendf(output, c!("        newobj instance void [mscorlib]System.Exception::.ctor(string)\n"));
+            sb_appendf(output, c!("        throw\n"));
             sb_appendf(output, c!("    Success:\n"));
             sb_appendf(output, c!("        ldloc.0\n"));
             sb_appendf(output, c!("        ret\n"));
