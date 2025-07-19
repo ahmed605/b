@@ -472,7 +472,6 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
                 let lib = (*linker)[i];
                 generate_extrn_lib_resolver(output, lib, mono);
             }
-            sb_appendf(output, c!("        br.s Failed\n"));
             sb_appendf(output, c!("    Failed:\n"));
             sb_appendf(output, c!("        ldstr \"Unable to resolve extrn \"\n"));
             sb_appendf(output, c!("        ldarg.0\n"));
