@@ -58,6 +58,7 @@ char(s,n) {
 }
 
 extrn printf;
+__variadic__(printf, 1);
 extrn putchar;
 extrn getchar;
 extrn exit;

@@ -1,6 +1,7 @@
 use core::ffi::*;
 use crate::nob::*;
 use crate::crust::libc::*;
+use crate::crust::assoc_lookup_cstr;
 use crate::lexer::*;
 use crate::missingf;
 use crate::ir::*;
@@ -34,7 +35,7 @@ pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, _data: *
     }
 }
 
-pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usize, funcs: *const [Func]) {
+pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usize, funcs: *const [Func], fixed_args: usize, filler_args: usize) {
     match fun {
         Arg::Bogus           => unreachable!("bogus-amogus"),
         Arg::AutoVar(..)     => missingf!(loc, c!("AutoVar\n")),
@@ -71,8 +72,22 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
                     sb_appendf(out, c!("        calli unmanaged cdecl int64("));
                 }
 
-                for i in 0..arity {
+                for i in 0..fixed_args {
                     if i > 0 { sb_appendf(out, c!(", ")); }
+                    sb_appendf(out, c!("int64"));
+                }
+
+                if fixed_args > 0 { sb_appendf(out, c!(", ")); }
+
+                for i in 0..filler_args {
+                    if i > 0 { sb_appendf(out, c!(", ")); }
+                    sb_appendf(out, c!("int64"));
+                }
+
+                if filler_args > 0 { sb_appendf(out, c!(", ")); }
+
+                for i in fixed_args..arity {
+                    if i > fixed_args { sb_appendf(out, c!(", ")); }
                     sb_appendf(out, c!("int64"));
                 }
                 sb_appendf(out, c!(")\n"));
@@ -83,7 +98,7 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
     }
 }
 
-pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *const [u8], funcs: *const [Func]) {
+pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *const [u8], funcs: *const [Func], variadics: *const [(*const c_char, Variadic)]) {
     sb_appendf(output, c!("    .method static int64 '%s' ("), func.name); // If the function we want to define collides with a instruction
                                                                           // we will get a syntax error so '' are necessary.
     for i in 0..func.params_count {
@@ -217,12 +232,55 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                 sb_appendf(output, c!("        stind.i8\n"));
             }
             Op::Funcall {result, fun, args} => {
-                for i in 0..args.count {
+                let mut fixed_args = 0;
+                match fun {
+                    Arg::External(name) | Arg::RefExternal(name) => {
+                        if let Some(variadic) = assoc_lookup_cstr(variadics, name) {
+                            fixed_args = (*variadic).fixed_args;
+                        }
+                    }
+                    _ => {}
+                }
+
+                // this has to be done in 2 separate paths because branching in the middle of
+                // adding function arguments to the stack isn't currently supported on .NET
+                let mut id = 0;
+                let mut filler_args = 0;
+                let variadic_args = args.count - fixed_args;
+                if fixed_args != 0 && variadic_args > 0 && fixed_args < 8 {
+                    filler_args = 8 - fixed_args;
+
+                    id = rand();
+                    sb_appendf(output, c!("        ldsfld bool Program::'<IsMacOS_ARM64>'\n"));
+                    sb_appendf(output, c!("        brtrue.s L_%d_%d\n"), op.loc.line_number, id);
+                    for i in 0..args.count {
+                        load_arg(op.loc, *args.items.add(i), output, data);
+                    }
+                    call_arg(op.loc, fun, output, args.count, funcs, 0, 0);
+                    sb_appendf(output, c!("        stloc V_%zu\n"), result);
+                    sb_appendf(output, c!("        br.s L_%d_%d_end\n"), op.loc.line_number, id);
+                    sb_appendf(output, c!("    L_%d_%d:\n"), op.loc.line_number, id);
+                    for i in 0..fixed_args {
+                        load_arg(op.loc, *args.items.add(i), output, data);
+                    }
+                    for _i in 0..filler_args {
+                        sb_appendf(output, c!("        ldc.i8 0\n"));
+                    }
+                }
+                else {
+                    fixed_args = 0;
+                }
+
+                for i in fixed_args..args.count {
                     load_arg(op.loc, *args.items.add(i), output, data);
                 }
-                call_arg(op.loc, fun, output, args.count, funcs);
+
+                call_arg(op.loc, fun, output, args.count, funcs, fixed_args, filler_args);
                 sb_appendf(output, c!("        stloc V_%zu\n"), result);
 
+                if id != 0 {
+                    sb_appendf(output, c!("    L_%d_%d_end:\n"), op.loc.line_number, id);
+                }
             }
             Op::Label {label} => {
                 sb_appendf(output, c!("    L%zu:\n"), label);
@@ -254,10 +312,10 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
     sb_appendf(output, c!("    }\n"));
 }
 
-pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, data: *const [u8]) {
+pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, data: *const [u8], variadics: *const [(*const c_char, Variadic)]) {
     for i in 0..funcs.len() {
         let func = (*funcs)[i];
-        generate_function(func, output, data, funcs);
+        generate_function(func, output, data, funcs, variadics);
     }
 }
 
@@ -295,7 +353,7 @@ pub unsafe fn generate_extrn_lib_resolver(output: *mut String_Builder, lib: *con
     sb_appendf(output, c!("        brtrue.s Success\n"));
 }
 
-pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Global], extrns: *const [*const c_char], funcs: *const [Func], linker: *const [*const c_char], mono: bool) {
+pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Global], extrns: *const [*const c_char], funcs: *const [Func], linker: *const [*const c_char], mono: bool, has_variadics: bool) {
     for i in 0..globals.len() {
         sb_appendf(output, c!("    .field public static int64 '%s'\n"), (*globals)[i].name);
     }
@@ -347,6 +405,12 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
     if globals.len() > 0 || /* has_rand ||*/ has_undefined_extrns {
         if has_undefined_extrns {
             sb_appendf(output, c!("    .field public static string '<PosixSuffix>'\n"));
+
+            sb_appendf(output, c!("    .field public static bool '<IsWindows>'\n"));
+            sb_appendf(output, c!("    .field public static bool '<IsLinux>'\n"));
+            if has_variadics {
+                sb_appendf(output, c!("    .field public static bool '<IsMacOS_ARM64>'\n"));
+            }
 
             if !mono {
                 sb_appendf(output, c!("    .method static bool '<TryLoadLibrary>'(string, native int&) {\n"));
@@ -487,6 +551,22 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
         sb_appendf(output, c!("    .method static void .cctor() {\n"));
 
         if has_undefined_extrns {
+            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
+            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+            sb_appendf(output, c!("        stsfld bool Program::'<IsWindows>'\n"));
+            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Linux()\n"));
+            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+            sb_appendf(output, c!("        stsfld bool Program::'<IsLinux>'\n"));
+            if has_variadics {
+                sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_OSX()\n"));
+                sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+                sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.Architecture [mscorlib]System.Runtime.InteropServices.RuntimeInformation::get_ProcessArchitecture()\n"));
+                sb_appendf(output, c!("        ldc.i4.3\n"));
+                sb_appendf(output, c!("        ceq\n"));
+                sb_appendf(output, c!("        and\n"));
+                sb_appendf(output, c!("        stsfld bool Program::'<IsMacOS_ARM64>'\n"));
+            }
+
             sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Linux()\n"));
             sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
             sb_appendf(output, c!("        brfalse.s macOS\n"));
@@ -627,8 +707,9 @@ pub unsafe fn generate_program(
     sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
 
     let funcs = da_slice((*p).funcs);
-    generate_fields(output, da_slice((*p).globals), da_slice((*p).extrns), funcs, linker, mono);
-    generate_funcs(funcs, output, sliced_data);
+    let variadics = da_slice((*p).variadics);
+    generate_fields(output, da_slice((*p).globals), da_slice((*p).extrns), funcs, linker, mono, variadics.len() > 0);
+    generate_funcs(funcs, output, sliced_data, variadics);
 
     sb_appendf(output, c!("    .method static void Main (string[] args) {\n"));
     sb_appendf(output, c!("        .entrypoint\n"));
