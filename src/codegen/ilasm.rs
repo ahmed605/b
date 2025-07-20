@@ -436,8 +436,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
                 sb_appendf(output, c!("    .method static pinvokeimpl(\"kernel32.dll\" as \"GetProcAddress\" nomangle ansi winapi) native int '<GetProcAddress>'(native int, string) preservesig {}\n"));
 
                 sb_appendf(output, c!("    .method static bool '<TryLoadLibrary>'(string, native int&) {\n"));
-                sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
-                sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+                sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
                 sb_appendf(output, c!("        brfalse.s Unix\n"));
                 sb_appendf(output, c!("        ldarg.1\n"));
                 sb_appendf(output, c!("        ldarg.0\n"));
@@ -475,8 +474,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
 
             sb_appendf(output, c!("    .method static native int '<LoadLibrary>'(string) {\n"));
             sb_appendf(output, c!("        .locals init (native int lib)\n"));
-            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
-            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+            sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
             sb_appendf(output, c!("        brfalse.s Unix\n"));
             sb_appendf(output, c!("        ldarg.0\n"));
             sb_appendf(output, c!("        ldstr \".dll\"\n"));
@@ -518,8 +516,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
                 sb_appendf(output, c!("    .method static native int '<GetExport>'(native int, string) {\n"));
                 sb_appendf(output, c!("        ldarg.0\n"));
                 sb_appendf(output, c!("        ldarg.1\n"));
-                sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
-                sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+                sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
                 sb_appendf(output, c!("        brfalse.s Unix\n"));
                 sb_appendf(output, c!("        call native int Program::'<GetProcAddress>'(native int, string)\n"));
                 sb_appendf(output, c!("        ret\n"));
@@ -567,8 +564,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
                 sb_appendf(output, c!("        stsfld bool Program::'<IsMacOS_ARM64>'\n"));
             }
 
-            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Linux()\n"));
-            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+            sb_appendf(output, c!("        ldsfld bool Program::'<IsLinux>'\n"));
             sb_appendf(output, c!("        brfalse.s macOS\n"));
             sb_appendf(output, c!("        ldstr \".so\"\n"));
             sb_appendf(output, c!("        br.s SetSuffix\n"));
@@ -577,8 +573,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
             sb_appendf(output, c!("    SetSuffix:\n"));
             sb_appendf(output, c!("        stsfld string Program::'<PosixSuffix>'\n"));
 
-            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
-            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+            sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
             sb_appendf(output, c!("        brfalse.s libc\n"));
             sb_appendf(output, c!("        ldstr \"msvcrt\"\n"));
             sb_appendf(output, c!("        call native int Program::'<LoadLibrary>'(string)\n"));
