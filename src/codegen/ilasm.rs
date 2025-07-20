@@ -505,8 +505,9 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
             sb_appendf(output, c!("        br.s set_libc\n"));
             sb_appendf(output, c!("    libc:\n"));
             if mono {
-                sb_appendf(output, c!("        ldc.i8 0\n"));
-                sb_appendf(output, c!("        conv.i\n"));
+                sb_appendf(output, c!("        ldnull\n"));
+                sb_appendf(output, c!("        ldc.i4.1\n"));
+                sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
             }
             else {
                 sb_appendf(output, c!("        call native int [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::GetMainProgramHandle()\n"));
