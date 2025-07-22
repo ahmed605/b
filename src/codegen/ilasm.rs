@@ -35,7 +35,7 @@ pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, _data: *
     }
 }
 
-pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usize, funcs: *const [Func], fixed_args: usize, filler_args: usize) {
+pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usize, funcs: *const [Func]) {
     match fun {
         Arg::Bogus           => unreachable!("bogus-amogus"),
         Arg::AutoVar(..)     => missingf!(loc, c!("AutoVar\n")),
@@ -72,22 +72,8 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
                     sb_appendf(out, c!("        calli unmanaged cdecl int64("));
                 }
 
-                for i in 0..fixed_args {
+                for i in 0..arity {
                     if i > 0 { sb_appendf(out, c!(", ")); }
-                    sb_appendf(out, c!("int64"));
-                }
-
-                if fixed_args > 0 { sb_appendf(out, c!(", ")); }
-
-                for i in 0..filler_args {
-                    if i > 0 { sb_appendf(out, c!(", ")); }
-                    sb_appendf(out, c!("int64"));
-                }
-
-                if filler_args > 0 { sb_appendf(out, c!(", ")); }
-
-                for i in fixed_args..arity {
-                    if i > fixed_args { sb_appendf(out, c!(", ")); }
                     sb_appendf(out, c!("int64"));
                 }
                 sb_appendf(out, c!(")\n"));
@@ -242,8 +228,6 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                     _ => {}
                 }
 
-                // this has to be done in 2 separate paths because branching in the middle of
-                // adding function arguments to the stack isn't currently supported on .NET
                 let mut id = 0;
                 let mut filler_args = 0;
                 let variadic_args = args.count - fixed_args;
@@ -256,7 +240,7 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                     for i in 0..args.count {
                         load_arg(op.loc, *args.items.add(i), output, data);
                     }
-                    call_arg(op.loc, fun, output, args.count, funcs, 0, 0);
+                    call_arg(op.loc, fun, output, args.count, funcs);
                     sb_appendf(output, c!("        stloc V_%zu\n"), result);
                     sb_appendf(output, c!("        br.s L_%d_%d_end\n"), op.loc.line_number, id);
                     sb_appendf(output, c!("    L_%d_%d:\n"), op.loc.line_number, id);
@@ -275,7 +259,7 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                     load_arg(op.loc, *args.items.add(i), output, data);
                 }
 
-                call_arg(op.loc, fun, output, args.count, funcs, fixed_args, filler_args);
+                call_arg(op.loc, fun, output, args.count + filler_args, funcs);
                 sb_appendf(output, c!("        stloc V_%zu\n"), result);
 
                 if id != 0 {
