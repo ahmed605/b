@@ -93,6 +93,8 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
     }
     sb_appendf(output, c!(") {\n"), func.name);
 
+    let mut maxstack = 0;
+
     if !(func.body.count == 1 && matches!((*func.body.items.add(0)).opcode, Op::Asm {..})) {
         if func.auto_vars_count > 0 {
             sb_appendf(output, c!("        .locals init ("));
@@ -103,9 +105,8 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
             sb_appendf(output, c!(")\n"));
         }
 
-        sb_appendf(output, c!("        .maxstack %zu\n"), 16); // By default max execution stack size is 8, which isn't enough
-                                                               // in cases where we need to pass more than 8 args to a function call.
-                                                               // TODO: Find a way to unhardcode this?
+        maxstack = if func.params_count > 8 { func.params_count } else { 8 };
+
         if func.params_count > 0 {
             for i in 0..func.params_count {
                 sb_appendf(output, c!("        ldarg %zu\n"), i);
@@ -236,13 +237,13 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
 
                     id = rand();
                     sb_appendf(output, c!("        ldsfld bool Program::'<IsMacOS_ARM64>'\n"));
-                    sb_appendf(output, c!("        brtrue.s L_%d_%d\n"), op.loc.line_number, id);
+                    sb_appendf(output, c!("        brtrue L_%d_%d\n"), op.loc.line_number, id);
                     for i in 0..args.count {
                         load_arg(op.loc, *args.items.add(i), output, data);
                     }
                     call_arg(op.loc, fun, output, args.count, funcs);
                     sb_appendf(output, c!("        stloc V_%zu\n"), result);
-                    sb_appendf(output, c!("        br.s L_%d_%d_end\n"), op.loc.line_number, id);
+                    sb_appendf(output, c!("        br L_%d_%d_end\n"), op.loc.line_number, id);
                     sb_appendf(output, c!("    L_%d_%d:\n"), op.loc.line_number, id);
                     for i in 0..fixed_args {
                         load_arg(op.loc, *args.items.add(i), output, data);
@@ -259,11 +260,19 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                     load_arg(op.loc, *args.items.add(i), output, data);
                 }
 
-                call_arg(op.loc, fun, output, args.count + filler_args, funcs);
+                let args_count = args.count + filler_args;
+                call_arg(op.loc, fun, output, args_count, funcs);
                 sb_appendf(output, c!("        stloc V_%zu\n"), result);
 
                 if id != 0 {
                     sb_appendf(output, c!("    L_%d_%d_end:\n"), op.loc.line_number, id);
+                }
+
+                // the "+ 1" is the stack item for the function pointer used by calli
+                // TODO: implement a better way for calculating additional stack space rather than hardcoding 1
+                let required_stack_items = args_count + 1;
+                if required_stack_items > maxstack {
+                    maxstack = required_stack_items;
                 }
             }
             Op::Label {label} => {
@@ -291,6 +300,10 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
     if func.body.count < 1 || !matches!((*func.body.items.add(func.body.count - 1)).opcode, Op::Asm {..} | Op::Return {..}) {
         sb_appendf(output, c!("        ldc.i8 0\n"));
         sb_appendf(output, c!("        ret\n"));
+    }
+
+    if maxstack != 0 {
+        sb_appendf(output, c!("        .maxstack %d\n"), maxstack);
     }
 
     sb_appendf(output, c!("    }\n"));
@@ -336,7 +349,7 @@ pub unsafe fn generate_extrn_lib_resolver(output: *mut String_Builder, lib: *con
         sb_appendf(output, c!("        stloc.0\n"));
         sb_appendf(output, c!("        ldloc.0\n"));
     }
-    sb_appendf(output, c!("        brtrue.s Success\n"));
+    sb_appendf(output, c!("        brtrue Success\n"));
 }
 
 pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Global], extrns: *const [*const c_char], funcs: *const [Func], linker: *const [*const c_char], mono: bool, has_variadics: bool) {
