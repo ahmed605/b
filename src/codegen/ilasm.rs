@@ -322,9 +322,11 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_extrn_lib_resolver(output: *mut String_Builder, lib: *const c_char, mono: bool) {
+pub unsafe fn generate_extrn_lib_resolver(output: *mut String_Builder, lib: *const c_char, use_underscored_name: bool, mono: bool) {
     sb_appendf(output, c!("        ldsfld native int Program::'<%s_lib>'\n"), lib);
+    if use_underscored_name { sb_appendf(output, c!("        ldstr \"_\"\n")); }
     sb_appendf(output, c!("        ldarg.0\n"));
+    if use_underscored_name { sb_appendf(output, c!("       call string [mscorlib]System.String::Concat(string, string)\n")); }
     if !mono {
         sb_appendf(output, c!("        ldloca.s 0\n"));
         sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryGetExport(native int, string, native int&)\n"));
@@ -512,10 +514,11 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
 
             sb_appendf(output, c!("    .method static native int '<ResolveExtrn>'(string) {\n"));
             sb_appendf(output, c!("        .locals init (native int fnptr)\n"));
-            generate_extrn_lib_resolver(output, c!("libc"), mono);
+            generate_extrn_lib_resolver(output, c!("libc"), false, mono);
+            generate_extrn_lib_resolver(output, c!("libc"), true, mono);
             for i in 0..linker.len() {
                 let lib = (*linker)[i];
-                generate_extrn_lib_resolver(output, lib, mono);
+                generate_extrn_lib_resolver(output, lib, false, mono);
             }
             sb_appendf(output, c!("    Failed:\n"));
             sb_appendf(output, c!("        ldstr \"Unable to resolve extrn \"\n"));
