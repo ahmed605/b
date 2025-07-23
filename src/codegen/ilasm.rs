@@ -352,6 +352,281 @@ pub unsafe fn generate_extrn_lib_resolver(output: *mut String_Builder, lib: *con
     sb_appendf(output, c!("        brtrue Success\n"));
 }
 
+pub unsafe fn generate_loader_helpers(output: *mut String_Builder, linker: *const [*const c_char], mono: bool) {
+    if !mono {
+        sb_appendf(output, c!("    .method static bool '<TryLoadLibrary>'(string, native int&) {\n"));
+        sb_appendf(output, c!("        ldarg.0\n"));
+        sb_appendf(output, c!("        ldarg.1\n"));
+        sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
+        sb_appendf(output, c!("        brfalse.s CurrentDir\n"));
+        sb_appendf(output, c!("        ldc.i4.1\n"));
+        sb_appendf(output, c!("        ret\n"));
+        sb_appendf(output, c!("    CurrentDir:\n"));
+        sb_appendf(output, c!("        call string [mscorlib]System.IO.Directory::GetCurrentDirectory()\n"));
+        sb_appendf(output, c!("        ldarg.0\n"));
+        sb_appendf(output, c!("        call string [mscorlib]System.IO.Path::Combine(string, string)\n"));
+        sb_appendf(output, c!("        ldarg.1\n"));
+        sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
+        sb_appendf(output, c!("        ret\n"));
+        sb_appendf(output, c!("    }\n"));
+    }
+    else {
+        sb_appendf(output, c!("    .method static pinvokeimpl(\"libc\" as \"dlopen\" nomangle ansi cdecl) native int '<dlopen>'(string, int32) preservesig {}\n"));
+        sb_appendf(output, c!("    .method static pinvokeimpl(\"libc\" as \"dlsym\" nomangle ansi cdecl) native int '<dlsym>'(native int, string) preservesig {}\n"));
+        sb_appendf(output, c!("    .method static pinvokeimpl(\"kernel32.dll\" as \"LoadLibraryA\" nomangle ansi winapi) native int '<LoadLibraryA>'(string) preservesig {}\n"));
+        sb_appendf(output, c!("    .method static pinvokeimpl(\"kernel32.dll\" as \"GetProcAddress\" nomangle ansi winapi) native int '<GetProcAddress>'(native int, string) preservesig {}\n"));
+
+        sb_appendf(output, c!("    .method static bool '<TryLoadLibrary>'(string, native int&) {\n"));
+        sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
+        sb_appendf(output, c!("        brfalse.s Unix\n"));
+        sb_appendf(output, c!("        ldarg.1\n"));
+        sb_appendf(output, c!("        ldarg.0\n"));
+        sb_appendf(output, c!("        call native int Program::'<LoadLibraryA>'(string)\n"));
+        sb_appendf(output, c!("        stind.i\n"));
+        sb_appendf(output, c!("        br.s Return\n"));
+        sb_appendf(output, c!("    Unix:\n"));
+        sb_appendf(output, c!("        ldarg.1\n"));
+        sb_appendf(output, c!("        ldarg.0\n"));
+        sb_appendf(output, c!("        ldc.i4.1\n"));
+        sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
+        sb_appendf(output, c!("        stind.i\n"));
+        sb_appendf(output, c!("        ldarg.1\n"));
+        sb_appendf(output, c!("        ldind.i\n"));
+        sb_appendf(output, c!("        brfalse.s CurrentDir\n"));
+        sb_appendf(output, c!("        br.s Return\n"));
+        sb_appendf(output, c!("    CurrentDir:\n"));
+        sb_appendf(output, c!("        ldarg.1\n"));
+        sb_appendf(output, c!("        call string [mscorlib]System.IO.Directory::GetCurrentDirectory()\n"));
+        sb_appendf(output, c!("        ldarg.0\n"));
+        sb_appendf(output, c!("        call string [mscorlib]System.IO.Path::Combine(string, string)\n"));
+        sb_appendf(output, c!("        ldc.i4.1\n"));
+        sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
+        sb_appendf(output, c!("        stind.i\n"));
+        sb_appendf(output, c!("    Return:\n"));
+        sb_appendf(output, c!("        ldarg.1\n"));
+        sb_appendf(output, c!("        ldind.i\n"));
+        sb_appendf(output, c!("        ldsfld native int [mscorlib]System.IntPtr::Zero\n"));
+        sb_appendf(output, c!("        ceq\n"));
+        sb_appendf(output, c!("        ldc.i4.0\n"));
+        sb_appendf(output, c!("        ceq\n"));
+        sb_appendf(output, c!("        ret\n"));
+        sb_appendf(output, c!("    }\n"));
+    }
+
+    sb_appendf(output, c!("    .method static native int '<LoadLibrary>'(string) {\n"));
+    sb_appendf(output, c!("        .locals init (native int lib)\n"));
+    sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
+    sb_appendf(output, c!("        brfalse.s Unix\n"));
+    sb_appendf(output, c!("        ldarg.0\n"));
+    sb_appendf(output, c!("        ldstr \".dll\"\n"));
+    sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+    sb_appendf(output, c!("        ldloca.s 0\n"));
+    if mono {
+        sb_appendf(output, c!("        call bool Program::'<TryLoadLibrary>'(string, native int&)\n"));
+    }
+    else {
+        sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
+    }
+    sb_appendf(output, c!("        brtrue.s Success\n"));
+    sb_appendf(output, c!("        br.s Failed\n"));
+    sb_appendf(output, c!("    Unix:\n"));
+    sb_appendf(output, c!("        ldarg.0\n"));
+    sb_appendf(output, c!("        ldsfld string Program::'<PosixSuffix>'\n"));
+    sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+    sb_appendf(output, c!("        ldloca.s 0\n"));
+    sb_appendf(output, c!("        call bool Program::'<TryLoadLibrary>'(string, native int&)\n"));
+    sb_appendf(output, c!("        brtrue.s Success\n"));
+    sb_appendf(output, c!("        ldstr \"lib\"\n"));
+    sb_appendf(output, c!("        ldarg.0\n"));
+    sb_appendf(output, c!("        ldsfld string Program::'<PosixSuffix>'\n"));
+    sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string, string)\n"));
+    sb_appendf(output, c!("        ldloca.s 0\n"));
+    sb_appendf(output, c!("        call bool Program::'<TryLoadLibrary>'(string, native int&)\n"));
+    sb_appendf(output, c!("        brtrue.s Success\n"));
+    sb_appendf(output, c!("    Failed:\n"));
+    sb_appendf(output, c!("        call valuetype [mscorlib]System.ConsoleColor [mscorlib]System.Console::get_ForegroundColor()\n"));
+    sb_appendf(output, c!("        ldc.i4.s 14\n"));
+    sb_appendf(output, c!("        call void [mscorlib]System.Console::set_ForegroundColor(valuetype [mscorlib]System.ConsoleColor)\n"));
+    sb_appendf(output, c!("        ldstr \"[WARNING] Unable to load library \"\n"));
+    sb_appendf(output, c!("        ldarg.0\n"));
+    sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+    sb_appendf(output, c!("        call void [mscorlib]System.Console::WriteLine(string)\n"));
+    sb_appendf(output, c!("        call void [mscorlib]System.Console::set_ForegroundColor(valuetype [mscorlib]System.ConsoleColor)\n"));
+    sb_appendf(output, c!("        ldc.i8 -2\n"));
+    sb_appendf(output, c!("        conv.i\n"));
+    sb_appendf(output, c!("        ret\n"));
+    sb_appendf(output, c!("    Success:\n"));
+    sb_appendf(output, c!("        ldloc.0\n"));
+    sb_appendf(output, c!("        ret\n"));
+    sb_appendf(output, c!("    }\n"));
+
+    if mono {
+        sb_appendf(output, c!("    .method static native int '<GetExport>'(native int, string) {\n"));
+        sb_appendf(output, c!("        ldarg.0\n"));
+        sb_appendf(output, c!("        ldarg.1\n"));
+        sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
+        sb_appendf(output, c!("        brfalse.s Unix\n"));
+        sb_appendf(output, c!("        call native int Program::'<GetProcAddress>'(native int, string)\n"));
+        sb_appendf(output, c!("        ret\n"));
+        sb_appendf(output, c!("    Unix:\n"));
+        sb_appendf(output, c!("        call native int Program::'<dlsym>'(native int, string)\n"));
+        sb_appendf(output, c!("        ret\n"));
+        sb_appendf(output, c!("    }\n"));
+    }
+
+    sb_appendf(output, c!("    .method static native int '<ResolveExtrn>'(string) {\n"));
+    sb_appendf(output, c!("        .locals init (native int fnptr)\n"));
+    generate_extrn_lib_resolver(output, c!("libc"), false, mono);
+    generate_extrn_lib_resolver(output, c!("libc"), true, mono);
+    for i in 0..linker.len() {
+        let lib = (*linker)[i];
+        generate_extrn_lib_resolver(output, lib, false, mono);
+    }
+    sb_appendf(output, c!("    Failed:\n"));
+    sb_appendf(output, c!("        ldstr \"Unable to resolve extrn \"\n"));
+    sb_appendf(output, c!("        ldarg.0\n"));
+    sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+    sb_appendf(output, c!("        newobj instance void [mscorlib]System.Exception::.ctor(string)\n"));
+    sb_appendf(output, c!("        throw\n"));
+    sb_appendf(output, c!("    Success:\n"));
+    sb_appendf(output, c!("        ldloc.0\n"));
+    sb_appendf(output, c!("        ret\n"));
+    sb_appendf(output, c!("    }\n"));
+}
+
+pub unsafe fn generate_constructor(output: *mut String_Builder, globals: *const [Global], linker: *const [*const c_char], mono: bool, has_variadics: bool, undefined_extrns: *const [*const c_char]) {
+    sb_appendf(output, c!("    .method static void .cctor() {\n"));
+
+    if undefined_extrns.len() > 0 {
+        sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
+        sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+        sb_appendf(output, c!("        stsfld bool Program::'<IsWindows>'\n"));
+        sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Linux()\n"));
+        sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+        sb_appendf(output, c!("        stsfld bool Program::'<IsLinux>'\n"));
+        if has_variadics {
+            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_OSX()\n"));
+            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
+            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.Architecture [mscorlib]System.Runtime.InteropServices.RuntimeInformation::get_ProcessArchitecture()\n"));
+            sb_appendf(output, c!("        ldc.i4.3\n"));
+            sb_appendf(output, c!("        ceq\n"));
+            sb_appendf(output, c!("        and\n"));
+            sb_appendf(output, c!("        stsfld bool Program::'<IsMacOS_ARM64>'\n"));
+        }
+
+        sb_appendf(output, c!("        ldsfld bool Program::'<IsLinux>'\n"));
+        sb_appendf(output, c!("        brfalse.s macOS\n"));
+        sb_appendf(output, c!("        ldstr \".so\"\n"));
+        sb_appendf(output, c!("        br.s SetSuffix\n"));
+        sb_appendf(output, c!("    macOS:\n"));
+        sb_appendf(output, c!("        ldstr \".dylib\"\n"));
+        sb_appendf(output, c!("    SetSuffix:\n"));
+        sb_appendf(output, c!("        stsfld string Program::'<PosixSuffix>'\n"));
+
+        sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
+        sb_appendf(output, c!("        brfalse.s libc\n"));
+        sb_appendf(output, c!("        ldstr \"msvcrt\"\n"));
+        sb_appendf(output, c!("        call native int Program::'<LoadLibrary>'(string)\n"));
+        sb_appendf(output, c!("        br.s set_libc\n"));
+        sb_appendf(output, c!("    libc:\n"));
+        if mono {
+            sb_appendf(output, c!("        ldnull\n"));
+            sb_appendf(output, c!("        ldc.i4.1\n"));
+            sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
+        }
+        else {
+            sb_appendf(output, c!("        call native int [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::GetMainProgramHandle()\n"));
+        }
+        sb_appendf(output, c!("    set_libc:\n"));
+        sb_appendf(output, c!("        stsfld native int Program::'<libc_lib>'\n"));
+
+        for i in 0..linker.len() {
+            let lib = (*linker)[i];
+            sb_appendf(output, c!("        ldstr \"%s\"\n"), lib);
+            sb_appendf(output, c!("        call native int Program::'<LoadLibrary>'(string)\n"));
+            sb_appendf(output, c!("        stsfld native int Program::'<%s_lib>'\n"), lib);
+        }
+
+        for i in 0..undefined_extrns.len() {
+            let extrn = (*undefined_extrns)[i];
+            sb_appendf(output, c!("        ldstr \"%s\"\n"), extrn);
+            sb_appendf(output, c!("        call native int Program::'<ResolveExtrn>'(string)\n"));
+            sb_appendf(output, c!("        stsfld native int Program::'<%s_fnptr>'\n"), extrn);
+        }
+    }
+
+    for i in 0..globals.len() {
+        let global = (*globals)[i];
+        let is_array = global.values.count > 1;
+        if is_array {
+            sb_appendf(output, c!("        ldc.i8 %zd\n"), global.values.count * 8);
+            //sb_appendf(output, c!("        call int64 Program::malloc(int64)\n"));
+            sb_appendf(output, c!("        ldsfld native int Program::'<malloc_fnptr>'\n"));
+            sb_appendf(output, c!("        calli unmanaged cdecl int64(int64)"));
+            sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name);
+        }
+
+        for j in 0..global.values.count {
+            match *global.values.items.add(j) {
+                ImmediateValue::Literal(lit) => {
+                    if !is_array {
+                        sb_appendf(output, c!("        ldc.i8 %zd\n"), lit);
+                        sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name)
+                    } else {
+                        sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), global.name);
+                        sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
+                        sb_appendf(output, c!("        add\n"));
+                        sb_appendf(output, c!("        ldc.i8 %zd\n"), lit);
+                        sb_appendf(output, c!("        stind.i8\n"))
+                    }
+                },
+                ImmediateValue::Name(name) => {
+                    if !is_array {
+                        sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), name);
+                        sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name)
+                    } else {
+                        sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), global.name);
+                        sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
+                        sb_appendf(output, c!("        add\n"));
+                        sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), name);
+                        sb_appendf(output, c!("        stind.i8\n"))
+                    }
+                }
+                ImmediateValue::DataOffset(offset) => {
+                    if !is_array {
+                        sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
+                        sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
+                        sb_appendf(output, c!("        add\n"));
+                        sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name)
+                    } else {
+                        sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), global.name);
+                        sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
+                        sb_appendf(output, c!("        add\n"));
+                        sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
+                        sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
+                        sb_appendf(output, c!("        add\n"));
+                        sb_appendf(output, c!("        stind.i8\n"))
+                    }
+                },
+            };
+        }
+    }
+
+    /*if has_rand {
+        if mono {
+            sb_appendf(output, c!("        newobj instance void [mscorlib]System.Random::.ctor()\n"));
+        }
+        else {
+            sb_appendf(output, c!("        call class [mscorlib]System.Random [System.Runtime]System.Random::get_Shared()\n"));
+        }
+
+        sb_appendf(output, c!("        stsfld class [mscorlib]System.Random Program::'<Random>'\n"));
+    }*/
+
+    sb_appendf(output, c!("        ret\n"));
+    sb_appendf(output, c!("    }\n"));
+}
+
 pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Global], extrns: *const [*const c_char], funcs: *const [Func], linker: *const [*const c_char], mono: bool, has_variadics: bool) {
     for i in 0..globals.len() {
         sb_appendf(output, c!("    .field public static int64 '%s'\n"), (*globals)[i].name);
@@ -411,277 +686,10 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
                 sb_appendf(output, c!("    .field public static bool '<IsMacOS_ARM64>'\n"));
             }
 
-            if !mono {
-                sb_appendf(output, c!("    .method static bool '<TryLoadLibrary>'(string, native int&) {\n"));
-                sb_appendf(output, c!("        ldarg.0\n"));
-                sb_appendf(output, c!("        ldarg.1\n"));
-                sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
-                sb_appendf(output, c!("        brfalse.s CurrentDir\n"));
-                sb_appendf(output, c!("        ldc.i4.1\n"));
-                sb_appendf(output, c!("        ret\n"));
-                sb_appendf(output, c!("    CurrentDir:\n"));
-                sb_appendf(output, c!("        call string [mscorlib]System.IO.Directory::GetCurrentDirectory()\n"));
-                sb_appendf(output, c!("        ldarg.0\n"));
-                sb_appendf(output, c!("        call string [mscorlib]System.IO.Path::Combine(string, string)\n"));
-                sb_appendf(output, c!("        ldarg.1\n"));
-                sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
-                sb_appendf(output, c!("        ret\n"));
-                sb_appendf(output, c!("    }\n"));
-            }
-            else {
-                sb_appendf(output, c!("    .method static pinvokeimpl(\"libc\" as \"dlopen\" nomangle ansi cdecl) native int '<dlopen>'(string, int32) preservesig {}\n"));
-                sb_appendf(output, c!("    .method static pinvokeimpl(\"libc\" as \"dlsym\" nomangle ansi cdecl) native int '<dlsym>'(native int, string) preservesig {}\n"));
-                sb_appendf(output, c!("    .method static pinvokeimpl(\"kernel32.dll\" as \"LoadLibraryA\" nomangle ansi winapi) native int '<LoadLibraryA>'(string) preservesig {}\n"));
-                sb_appendf(output, c!("    .method static pinvokeimpl(\"kernel32.dll\" as \"GetProcAddress\" nomangle ansi winapi) native int '<GetProcAddress>'(native int, string) preservesig {}\n"));
-
-                sb_appendf(output, c!("    .method static bool '<TryLoadLibrary>'(string, native int&) {\n"));
-                sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
-                sb_appendf(output, c!("        brfalse.s Unix\n"));
-                sb_appendf(output, c!("        ldarg.1\n"));
-                sb_appendf(output, c!("        ldarg.0\n"));
-                sb_appendf(output, c!("        call native int Program::'<LoadLibraryA>'(string)\n"));
-                sb_appendf(output, c!("        stind.i\n"));
-                sb_appendf(output, c!("        br.s Return\n"));
-                sb_appendf(output, c!("    Unix:\n"));
-                sb_appendf(output, c!("        ldarg.1\n"));
-                sb_appendf(output, c!("        ldarg.0\n"));
-                sb_appendf(output, c!("        ldc.i4.1\n"));
-                sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
-                sb_appendf(output, c!("        stind.i\n"));
-                sb_appendf(output, c!("        ldarg.1\n"));
-                sb_appendf(output, c!("        ldind.i\n"));
-                sb_appendf(output, c!("        brfalse.s CurrentDir\n"));
-                sb_appendf(output, c!("        br.s Return\n"));
-                sb_appendf(output, c!("    CurrentDir:\n"));
-                sb_appendf(output, c!("        ldarg.1\n"));
-                sb_appendf(output, c!("        call string [mscorlib]System.IO.Directory::GetCurrentDirectory()\n"));
-                sb_appendf(output, c!("        ldarg.0\n"));
-                sb_appendf(output, c!("        call string [mscorlib]System.IO.Path::Combine(string, string)\n"));
-                sb_appendf(output, c!("        ldc.i4.1\n"));
-                sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
-                sb_appendf(output, c!("        stind.i\n"));
-                sb_appendf(output, c!("    Return:\n"));
-                sb_appendf(output, c!("        ldarg.1\n"));
-                sb_appendf(output, c!("        ldind.i\n"));
-                sb_appendf(output, c!("        ldsfld native int [mscorlib]System.IntPtr::Zero\n"));
-                sb_appendf(output, c!("        ceq\n"));
-                sb_appendf(output, c!("        ldc.i4.0\n"));
-                sb_appendf(output, c!("        ceq\n"));
-                sb_appendf(output, c!("        ret\n"));
-                sb_appendf(output, c!("    }\n"));
-            }
-
-            sb_appendf(output, c!("    .method static native int '<LoadLibrary>'(string) {\n"));
-            sb_appendf(output, c!("        .locals init (native int lib)\n"));
-            sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
-            sb_appendf(output, c!("        brfalse.s Unix\n"));
-            sb_appendf(output, c!("        ldarg.0\n"));
-            sb_appendf(output, c!("        ldstr \".dll\"\n"));
-            sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
-            sb_appendf(output, c!("        ldloca.s 0\n"));
-            if mono {
-                sb_appendf(output, c!("        call bool Program::'<TryLoadLibrary>'(string, native int&)\n"));
-            }
-            else {
-                sb_appendf(output, c!("        call bool [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::TryLoad(string, native int&)\n"));
-            }
-            sb_appendf(output, c!("        brtrue.s Success\n"));
-            sb_appendf(output, c!("        br.s Failed\n"));
-            sb_appendf(output, c!("    Unix:\n"));
-            sb_appendf(output, c!("        ldarg.0\n"));
-            sb_appendf(output, c!("        ldsfld string Program::'<PosixSuffix>'\n"));
-            sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
-            sb_appendf(output, c!("        ldloca.s 0\n"));
-            sb_appendf(output, c!("        call bool Program::'<TryLoadLibrary>'(string, native int&)\n"));
-            sb_appendf(output, c!("        brtrue.s Success\n"));
-            sb_appendf(output, c!("        ldstr \"lib\"\n"));
-            sb_appendf(output, c!("        ldarg.0\n"));
-            sb_appendf(output, c!("        ldsfld string Program::'<PosixSuffix>'\n"));
-            sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string, string)\n"));
-            sb_appendf(output, c!("        ldloca.s 0\n"));
-            sb_appendf(output, c!("        call bool Program::'<TryLoadLibrary>'(string, native int&)\n"));
-            sb_appendf(output, c!("        brtrue.s Success\n"));
-            sb_appendf(output, c!("    Failed:\n"));
-            sb_appendf(output, c!("        call valuetype [mscorlib]System.ConsoleColor [mscorlib]System.Console::get_ForegroundColor()\n"));
-            sb_appendf(output, c!("        ldc.i4.s 14\n"));
-            sb_appendf(output, c!("        call void [mscorlib]System.Console::set_ForegroundColor(valuetype [mscorlib]System.ConsoleColor)\n"));
-            sb_appendf(output, c!("        ldstr \"[WARNING] Unable to load library \"\n"));
-            sb_appendf(output, c!("        ldarg.0\n"));
-            sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
-            sb_appendf(output, c!("        call void [mscorlib]System.Console::WriteLine(string)\n"));
-            sb_appendf(output, c!("        call void [mscorlib]System.Console::set_ForegroundColor(valuetype [mscorlib]System.ConsoleColor)\n"));
-            sb_appendf(output, c!("        ldc.i8 -2\n"));
-            sb_appendf(output, c!("        conv.i\n"));
-            sb_appendf(output, c!("        ret\n"));
-            sb_appendf(output, c!("    Success:\n"));
-            sb_appendf(output, c!("        ldloc.0\n"));
-            sb_appendf(output, c!("        ret\n"));
-            sb_appendf(output, c!("    }\n"));
-
-            if mono {
-                sb_appendf(output, c!("    .method static native int '<GetExport>'(native int, string) {\n"));
-                sb_appendf(output, c!("        ldarg.0\n"));
-                sb_appendf(output, c!("        ldarg.1\n"));
-                sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
-                sb_appendf(output, c!("        brfalse.s Unix\n"));
-                sb_appendf(output, c!("        call native int Program::'<GetProcAddress>'(native int, string)\n"));
-                sb_appendf(output, c!("        ret\n"));
-                sb_appendf(output, c!("    Unix:\n"));
-                sb_appendf(output, c!("        call native int Program::'<dlsym>'(native int, string)\n"));
-                sb_appendf(output, c!("        ret\n"));
-                sb_appendf(output, c!("    }\n"));
-            }
-
-            sb_appendf(output, c!("    .method static native int '<ResolveExtrn>'(string) {\n"));
-            sb_appendf(output, c!("        .locals init (native int fnptr)\n"));
-            generate_extrn_lib_resolver(output, c!("libc"), false, mono);
-            generate_extrn_lib_resolver(output, c!("libc"), true, mono);
-            for i in 0..linker.len() {
-                let lib = (*linker)[i];
-                generate_extrn_lib_resolver(output, lib, false, mono);
-            }
-            sb_appendf(output, c!("    Failed:\n"));
-            sb_appendf(output, c!("        ldstr \"Unable to resolve extrn \"\n"));
-            sb_appendf(output, c!("        ldarg.0\n"));
-            sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
-            sb_appendf(output, c!("        newobj instance void [mscorlib]System.Exception::.ctor(string)\n"));
-            sb_appendf(output, c!("        throw\n"));
-            sb_appendf(output, c!("    Success:\n"));
-            sb_appendf(output, c!("        ldloc.0\n"));
-            sb_appendf(output, c!("        ret\n"));
-            sb_appendf(output, c!("    }\n"));
+            generate_loader_helpers(output, linker, mono);
         }
 
-        sb_appendf(output, c!("    .method static void .cctor() {\n"));
-
-        if has_undefined_extrns {
-            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Windows()\n"));
-            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
-            sb_appendf(output, c!("        stsfld bool Program::'<IsWindows>'\n"));
-            sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_Linux()\n"));
-            sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
-            sb_appendf(output, c!("        stsfld bool Program::'<IsLinux>'\n"));
-            if has_variadics {
-                sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform [mscorlib]System.Runtime.InteropServices.OSPlatform::get_OSX()\n"));
-                sb_appendf(output, c!("        call bool [mscorlib]System.Runtime.InteropServices.RuntimeInformation::IsOSPlatform(valuetype [mscorlib]System.Runtime.InteropServices.OSPlatform)\n"));
-                sb_appendf(output, c!("        call valuetype [mscorlib]System.Runtime.InteropServices.Architecture [mscorlib]System.Runtime.InteropServices.RuntimeInformation::get_ProcessArchitecture()\n"));
-                sb_appendf(output, c!("        ldc.i4.3\n"));
-                sb_appendf(output, c!("        ceq\n"));
-                sb_appendf(output, c!("        and\n"));
-                sb_appendf(output, c!("        stsfld bool Program::'<IsMacOS_ARM64>'\n"));
-            }
-
-            sb_appendf(output, c!("        ldsfld bool Program::'<IsLinux>'\n"));
-            sb_appendf(output, c!("        brfalse.s macOS\n"));
-            sb_appendf(output, c!("        ldstr \".so\"\n"));
-            sb_appendf(output, c!("        br.s SetSuffix\n"));
-            sb_appendf(output, c!("    macOS:\n"));
-            sb_appendf(output, c!("        ldstr \".dylib\"\n"));
-            sb_appendf(output, c!("    SetSuffix:\n"));
-            sb_appendf(output, c!("        stsfld string Program::'<PosixSuffix>'\n"));
-
-            sb_appendf(output, c!("        ldsfld bool Program::'<IsWindows>'\n"));
-            sb_appendf(output, c!("        brfalse.s libc\n"));
-            sb_appendf(output, c!("        ldstr \"msvcrt\"\n"));
-            sb_appendf(output, c!("        call native int Program::'<LoadLibrary>'(string)\n"));
-            sb_appendf(output, c!("        br.s set_libc\n"));
-            sb_appendf(output, c!("    libc:\n"));
-            if mono {
-                sb_appendf(output, c!("        ldnull\n"));
-                sb_appendf(output, c!("        ldc.i4.1\n"));
-                sb_appendf(output, c!("        call native int Program::'<dlopen>'(string, int32)\n"));
-            }
-            else {
-                sb_appendf(output, c!("        call native int [System.Runtime.InteropServices]System.Runtime.InteropServices.NativeLibrary::GetMainProgramHandle()\n"));
-            }
-            sb_appendf(output, c!("    set_libc:\n"));
-            sb_appendf(output, c!("        stsfld native int Program::'<libc_lib>'\n"));
-
-            for i in 0..linker.len() {
-                let lib = (*linker)[i];
-                sb_appendf(output, c!("        ldstr \"%s\"\n"), lib);
-                sb_appendf(output, c!("        call native int Program::'<LoadLibrary>'(string)\n"));
-                sb_appendf(output, c!("        stsfld native int Program::'<%s_lib>'\n"), lib);
-            }
-
-            for i in 0..undefined_extrns.count {
-                let extrn = *undefined_extrns.items.add(i);
-                sb_appendf(output, c!("        ldstr \"%s\"\n"), extrn);
-                sb_appendf(output, c!("        call native int Program::'<ResolveExtrn>'(string)\n"));
-                sb_appendf(output, c!("        stsfld native int Program::'<%s_fnptr>'\n"), extrn);
-            }
-        }
-
-        for i in 0..globals.len() {
-            let global = (*globals)[i];
-            let is_array = global.values.count > 1;
-            if is_array {
-                sb_appendf(output, c!("        ldc.i8 %zd\n"), global.values.count * 8);
-                //sb_appendf(output, c!("        call int64 Program::malloc(int64)\n"));
-                sb_appendf(output, c!("        ldsfld native int Program::'<malloc_fnptr>'\n"));
-                sb_appendf(output, c!("        calli unmanaged cdecl int64(int64)"));
-                sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name);
-            }
-
-            for j in 0..global.values.count {
-                match *global.values.items.add(j) {
-                    ImmediateValue::Literal(lit) => {
-                        if !is_array {
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), lit);
-                            sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name)
-                        } else {
-                            sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), global.name);
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
-                            sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), lit);
-                            sb_appendf(output, c!("        stind.i8\n"))
-                        }
-                    },
-                    ImmediateValue::Name(name) => {
-                        if !is_array {
-                            sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), name);
-                            sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name)
-                        } else {
-                            sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), global.name);
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
-                            sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), name);
-                            sb_appendf(output, c!("        stind.i8\n"))
-                        }
-                    }
-                    ImmediateValue::DataOffset(offset) => {
-                        if !is_array {
-                            sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
-                            sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name)
-                        } else {
-                            sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), global.name);
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
-                            sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
-                            sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        stind.i8\n"))
-                        }
-                    },
-                };
-            }
-        }
-
-        /*if has_rand {
-            if mono {
-                sb_appendf(output, c!("        newobj instance void [mscorlib]System.Random::.ctor()\n"));
-            }
-            else {
-                sb_appendf(output, c!("        call class [mscorlib]System.Random [System.Runtime]System.Random::get_Shared()\n"));
-            }
-
-            sb_appendf(output, c!("        stsfld class [mscorlib]System.Random Program::'<Random>'\n"));
-        }*/
-
-        sb_appendf(output, c!("        ret\n"));
-        sb_appendf(output, c!("    }\n"));
+        generate_constructor(output, globals, linker, mono, has_variadics, da_slice(undefined_extrns));
     }
 }
 
