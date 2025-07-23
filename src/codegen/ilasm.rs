@@ -501,8 +501,15 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
             sb_appendf(output, c!("        ldloca.s 0\n"));
             sb_appendf(output, c!("        call bool Program::'<TryLoadLibrary>'(string, native int&)\n"));
             sb_appendf(output, c!("        brtrue.s Success\n"));
-            sb_appendf(output, c!("        br.s Failed\n"));
             sb_appendf(output, c!("    Failed:\n"));
+            sb_appendf(output, c!("        call valuetype [mscorlib]System.ConsoleColor [mscorlib]System.Console::get_ForegroundColor()\n"));
+            sb_appendf(output, c!("        ldc.i4.s 14\n"));
+            sb_appendf(output, c!("        call void [mscorlib]System.Console::set_ForegroundColor(valuetype [mscorlib]System.ConsoleColor)\n"));
+            sb_appendf(output, c!("        ldstr \"[WARNING] Unable to load library \"\n"));
+            sb_appendf(output, c!("        ldarg.0\n"));
+            sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
+            sb_appendf(output, c!("        call void [mscorlib]System.Console::WriteLine(string)\n"));
+            sb_appendf(output, c!("        call void [mscorlib]System.Console::set_ForegroundColor(valuetype [mscorlib]System.ConsoleColor)\n"));
             sb_appendf(output, c!("        ldc.i8 0\n"));
             sb_appendf(output, c!("        conv.i\n"));
             sb_appendf(output, c!("        ret\n"));
