@@ -510,7 +510,7 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
             sb_appendf(output, c!("        call string [mscorlib]System.String::Concat(string, string)\n"));
             sb_appendf(output, c!("        call void [mscorlib]System.Console::WriteLine(string)\n"));
             sb_appendf(output, c!("        call void [mscorlib]System.Console::set_ForegroundColor(valuetype [mscorlib]System.ConsoleColor)\n"));
-            sb_appendf(output, c!("        ldc.i8 0\n"));
+            sb_appendf(output, c!("        ldc.i8 -2\n"));
             sb_appendf(output, c!("        conv.i\n"));
             sb_appendf(output, c!("        ret\n"));
             sb_appendf(output, c!("    Success:\n"));
