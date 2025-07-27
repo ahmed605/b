@@ -1,22 +1,39 @@
-putchar(x) {
-    __asm__(
-        "ldarg.0",
-        "conv.u1",
-        "conv.u2",
-        "call void [mscorlib]System.Console::Write(char)",
-        "ldc.i8 0",
-        "ret"
-    );
-}
+// putchar(x) {
+//     __asm__(
+//         "ldarg.0",
+//         "conv.u1",
+//         "conv.u2",
+//         "call void [mscorlib]System.Console::Write(char)",
+//         "ldc.i8 0",
+//         "ret"
+//     );
+// }
 
-getchar() {
-    __asm__(
-        "call int32 [mscorlib]System.Console::Read()",
-        "conv.i8",
-        "ret"
-    );
-}
+// getchar() {
+//     __asm__(
+//         "call int32 [mscorlib]System.Console::Read()",
+//         "conv.i8",
+//         "ret"
+//     );
+// }
 
+// strlen(s) {
+//     auto n;
+//     n = 0;
+//     while (char(s, n)) n++;
+//     return (n);
+// }
+
+// rand() {
+//     __asm__(
+//         "ldsfld class [mscorlib]System.Random Program::'<Random>'",
+//         "callvirt instance int32 [mscorlib]System.Random::Next()",
+//         "conv.i8",
+//         "ret"
+//     );
+// }
+
+// kept because Windows
 usleep(us) {
     __asm__(
         "ldarg.0",
@@ -40,20 +57,8 @@ char(s,n) {
     );
 }
 
-strlen(s) {
-    auto n;
-    n = 0;
-    while (char(s, n)) n++;
-    return (n);
-}
-
-rand() {
-    __asm__(
-        "ldsfld class [mscorlib]System.Random Program::'<Random>'",
-        "callvirt instance int32 [mscorlib]System.Random::Next()",
-        "conv.i8",
-        "ret"
-    );
-}
-
 extrn printf;
+__variadic__(printf, 1);
+extrn putchar;
+extrn getchar;
+extrn exit;

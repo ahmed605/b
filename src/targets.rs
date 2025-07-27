@@ -30,7 +30,9 @@ impl Target {
             Self::Uxn                => c!(".rom"),
             Self::Mos6502_Posix      => c!(".6502"),
             Self::ILasm_Mono         => c!(".exe"),
-            Self::ILasm_Core         => c!(".dll"),
+            Self::ILasm_Core         => c!(".exe.dll"), // the ".exe" part is a hack for programs that link to libraries with same name as theirs
+                                                        // for example raylib.dll (B program) cannot load raylib.dll (the actual raylib library), but raylib.exe.dll can
+                                                        // maybe something like .b.dll can be used instead?
         }
     }
 
